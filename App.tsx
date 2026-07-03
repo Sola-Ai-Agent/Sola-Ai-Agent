@@ -710,7 +710,7 @@ ${pastBookings || 'No bookings in history.'}
   // --- MESSAGE HANDLER ---
 
   const handleLiveMessage = async (message: LiveServerMessage, currentMode: SessionMode) => {
-    if (message.interrupted || (message.serverContent as any)?.interrupted) {
+    if (message.serverContent?.interrupted) {
       handleInterruption();
       return;
     }
