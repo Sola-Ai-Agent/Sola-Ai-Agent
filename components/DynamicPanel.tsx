@@ -234,8 +234,29 @@ const DynamicPanel: React.FC<DynamicPanelProps> = ({
 
             {/* Middle avatar section */}
             <div className="flex flex-col items-center text-center my-auto">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 dark:from-zinc-900 dark:to-zinc-950 border border-brand-200 dark:border-zinc-800 flex items-center justify-center shadow-xl">
-                <Phone className="h-10 w-10 text-brand-600 dark:text-brand-400 animate-bounce" />
+              <div className="flex items-center justify-center gap-6 mb-4 mt-2">
+                {/* Sola Avatar */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 dark:from-violet-900 dark:to-indigo-950 border border-violet-400 dark:border-violet-800 flex items-center justify-center shadow-lg relative">
+                    <Sparkles className="h-8 w-8 text-white dark:text-violet-200" />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mt-1.5 uppercase tracking-wider">Sola AI</span>
+                </div>
+
+                {/* Connecting indicator */}
+                <div className="flex flex-col items-center justify-center">
+                  <div className="h-[2px] w-12 bg-zinc-200 dark:bg-zinc-800 relative flex items-center justify-center">
+                    <div className="absolute w-2 h-2 rounded-full bg-brand-500 animate-ping" />
+                  </div>
+                </div>
+
+                {/* Receptionist Avatar */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 dark:from-zinc-900 dark:to-zinc-950 border border-brand-200 dark:border-zinc-800 flex items-center justify-center shadow-lg">
+                    <Phone className="h-8 w-8 text-brand-600 dark:text-brand-400 animate-pulse" />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mt-1.5 uppercase tracking-wider">Receptionist</span>
+                </div>
               </div>
               <h2 className="mt-5 text-xl font-bold text-zinc-900 dark:text-white tracking-tight">{displayName}</h2>
               <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1 font-mono">{displayNumber}</p>
@@ -287,8 +308,29 @@ const DynamicPanel: React.FC<DynamicPanelProps> = ({
 
             {/* Avatar & Info */}
             <div className="flex flex-col items-center text-center my-auto">
-              <div className="w-28 h-28 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 dark:from-zinc-900 dark:to-zinc-950 border border-brand-200 dark:border-zinc-800 flex items-center justify-center shadow-xl">
-                <span className="text-3xl font-extrabold text-brand-700 dark:text-brand-350">{displayName.charAt(0)}</span>
+              <div className="flex items-center justify-center gap-6 mb-4 mt-2">
+                {/* Sola Avatar */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-600 to-indigo-600 dark:from-violet-900 dark:to-indigo-950 border border-violet-400 dark:border-violet-800 flex items-center justify-center shadow-lg relative">
+                    <Sparkles className="h-8 w-8 text-white dark:text-violet-200" />
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mt-1.5 uppercase tracking-wider">Sola AI</span>
+                </div>
+
+                {/* Connecting indicator */}
+                <div className="flex flex-col items-center justify-center">
+                  <div className="h-[2px] w-12 bg-zinc-200 dark:bg-zinc-800 relative flex items-center justify-center">
+                    <div className="absolute w-2 h-2 rounded-full bg-brand-500 animate-ping" />
+                  </div>
+                </div>
+
+                {/* Receptionist Avatar */}
+                <div className="flex flex-col items-center">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-brand-100 to-brand-50 dark:from-zinc-900 dark:to-zinc-950 border border-brand-200 dark:border-zinc-800 flex items-center justify-center shadow-lg">
+                    <span className="text-2xl font-extrabold text-brand-700 dark:text-brand-350">{displayName.charAt(0)}</span>
+                  </div>
+                  <span className="text-[10px] font-bold text-zinc-500 dark:text-zinc-400 mt-1.5 uppercase tracking-wider">Receptionist</span>
+                </div>
               </div>
               <h2 className="mt-5 text-xl font-bold text-zinc-900 dark:text-white tracking-tight">{displayName}</h2>
               <p className="text-xs text-zinc-400 dark:text-zinc-500 mt-1 font-mono">{phoneNumber}</p>

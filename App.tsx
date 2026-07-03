@@ -469,6 +469,8 @@ ${pastBookings || 'No bookings in history.'}
   // Refs to avoid stale closures for places and selectedPlaceId inside live message handlers
   const placesRef = useRef<Place[]>(DEFAULT_PLACES);
   const selectedPlaceIdRef = useRef<string | undefined>(undefined);
+  const sessionModeRef = useRef<SessionMode>(SessionMode.USER);
+  const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   
   // Audio Refs
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -485,6 +487,10 @@ ${pastBookings || 'No bookings in history.'}
   const connectedRef = useRef(false);
 
   // Keep Ref in sync with State
+  useEffect(() => {
+    sessionModeRef.current = sessionMode;
+  }, [sessionMode]);
+
   useEffect(() => {
     bookingDetailsRef.current = bookingDetails;
   }, [bookingDetails]);
@@ -606,13 +612,17 @@ ${pastBookings || 'No bookings in history.'}
           },
           onclose: () => {
             console.log(`Live API disconnected [${mode}]`);
-            connectedRef.current = false;
-            setIsActive(false);
+            if (sessionModeRef.current === mode) {
+              connectedRef.current = false;
+              setIsActive(false);
+            }
           },
           onerror: (err) => {
             console.error("Live API Error:", err);
-            connectedRef.current = false;
-            setIsActive(false);
+            if (sessionModeRef.current === mode) {
+              connectedRef.current = false;
+              setIsActive(false);
+            }
           }
         },
         config: {
@@ -661,6 +671,7 @@ ${pastBookings || 'No bookings in history.'}
 
   const disconnectLiveAPI = async (resetUI = true) => {
     console.log('disconnectLiveAPI: starting');
+    handleInterruption();
     connectedRef.current = false;
     
     if (sessionRef.current) {
@@ -699,6 +710,11 @@ ${pastBookings || 'No bookings in history.'}
   // --- MESSAGE HANDLER ---
 
   const handleLiveMessage = async (message: LiveServerMessage, currentMode: SessionMode) => {
+    if (message.interrupted || (message.serverContent as any)?.interrupted) {
+      handleInterruption();
+      return;
+    }
+
     // 1. Play Audio
     const audioData = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
     if (audioData) {
@@ -1116,6 +1132,19 @@ ${pastBookings || 'No bookings in history.'}
     await connectToLiveAPI(nextMode, detailsParam);
   };
 
+  const handleInterruption = () => {
+    console.log('handleInterruption: stopping active audio nodes', activeSourcesRef.current.length);
+    activeSourcesRef.current.forEach(source => {
+      try {
+        source.stop();
+      } catch (e) {
+        // Ignored
+      }
+    });
+    activeSourcesRef.current = [];
+    nextStartTimeRef.current = 0;
+  };
+
   const playAudioResponse = async (base64Data: string) => {
     if (!outputAudioContextRef.current) return;
     try {
@@ -1129,6 +1158,11 @@ ${pastBookings || 'No bookings in history.'}
         const startTime = Math.max(now, nextStartTimeRef.current);
         source.start(startTime);
         nextStartTimeRef.current = startTime + buffer.duration;
+
+        activeSourcesRef.current.push(source);
+        source.onended = () => {
+          activeSourcesRef.current = activeSourcesRef.current.filter(s => s !== source);
+        };
     } catch (e) {
         console.error("Error playing audio", e);
     }
@@ -1139,6 +1173,10 @@ ${pastBookings || 'No bookings in history.'}
   };
 
   const handleToggle = () => {
+    if (sessionMode === SessionMode.RECEPTIONIST || bookingDetails?.status === 'negotiating') {
+      console.log('handleToggle: Ignored click on main microphone during active call or dialing.');
+      return;
+    }
     if (isActive) {
       disconnectLiveAPI(true);
       setSessionMode(SessionMode.USER); // Reset to User mode on full stop
@@ -1262,7 +1300,8 @@ ${pastBookings || 'No bookings in history.'}
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans transition-colors duration-300">
       {/* Left Panel: Sola Interface */}
-      <div className="w-1/3 flex flex-col shadow-xl z-20 bg-white/95 dark:bg-zinc-950/95 border-r border-zinc-200/80 dark:border-zinc-900 backdrop-blur-md transition-colors duration-300">
+      {!(sessionMode === SessionMode.RECEPTIONIST || bookingDetails?.status === 'negotiating') && (
+        <div className="w-1/3 flex flex-col shadow-xl z-20 bg-white/95 dark:bg-zinc-950/95 border-r border-zinc-200/80 dark:border-zinc-900 backdrop-blur-md transition-colors duration-300">
         <div className="p-6 border-b border-zinc-100 dark:border-zinc-900">
           <div className="flex items-center justify-between">
             <div className="min-w-0">
@@ -1371,6 +1410,7 @@ ${pastBookings || 'No bookings in history.'}
            />
         </div>
       </div>
+      )}
 
       {/* Right Panel: Dynamic Content */}
       <div className="flex-1 relative h-full overflow-hidden z-10">
