@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Appointment, BookingDetails } from '../types';
+import { Calendar, MapPin, Activity, Check, AlertCircle, Mail, Clock, RefreshCw } from 'lucide-react';
 
 interface CalendarViewProps {
   appointment: Appointment;
@@ -15,7 +16,6 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
   const [emailStatus, setEmailStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    // reset spinner if appointment changed
     setIsAdding(false);
   }, [appointment, bookingDetails]);
 
@@ -31,77 +31,92 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
       try {
         await onAddToCalendar();
       } finally {
-        // small UX delay
         setTimeout(() => setIsAdding(false), 800);
       }
     }
   };
 
-  // Only show confirmed UI when bookingDetails explicitly reports 'confirmed'
-  if (!bookingDetails || bookingDetails.status === 'negotiating') {
+  // If bookingDetails explicitly reports 'failed' show cancelled state
+  if (bookingDetails?.status === 'failed') {
     return (
-      <div className="h-full w-full bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-100">
-        <div className="bg-zinc-900/80 p-8 rounded-2xl border border-zinc-800 shadow-2xl max-w-md w-full text-center backdrop-blur-md">
-          <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3" />
-            </svg>
+      <div className="h-full w-full bg-slate-50 dark:bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+        <div className="bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 p-8 rounded-3xl premium-shadow max-w-md w-full text-center backdrop-blur-md">
+          <div className="w-16 h-16 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <AlertCircle className="h-8 w-8 text-rose-500 dark:text-rose-400" />
           </div>
 
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {bookingDetails ? 'Booking Pending' : 'No Booking'}
-          </h2>
-
-          <p className="text-zinc-400 mb-6 text-sm leading-relaxed">
-            {bookingDetails
-              ? 'Your booking is still being confirmed by the provider. It will appear here once the call succeeds.'
-              : 'You do not have a confirmed booking yet.'}
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">Booking Call Failed</h2>
+          <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-sm leading-relaxed">
+            The call ended before Sola could confirm the appointment with the receptionist. Please try again.
           </p>
 
-          <div className="bg-zinc-950/60 rounded-xl p-4 shadow-sm border border-zinc-800 text-left mb-6">
-             <div className="flex items-start mb-4">
-               <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                 </svg>
+          <button
+            disabled
+            className="w-full py-3 px-4 rounded-xl font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-650 cursor-not-allowed text-sm"
+          >
+            Add to Google Calendar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // If bookingDetails explicitly reports 'confirmed' or 'negotiating'
+  if (!bookingDetails || bookingDetails.status === 'negotiating') {
+    return (
+      <div className="h-full w-full bg-slate-50 dark:bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+        <div className="bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 p-8 rounded-3xl premium-shadow max-w-md w-full text-center backdrop-blur-md">
+          <div className="w-16 h-16 bg-brand-50 dark:bg-brand-950/30 border border-brand-200/50 dark:border-brand-900/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm animate-pulse">
+            <RefreshCw className="h-7 w-7 text-brand-600 dark:text-brand-400 animate-spin" style={{ animationDuration: '3s' }} />
+          </div>
+
+          <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">
+            {bookingDetails ? 'Booking in Progress' : 'No Active Booking'}
+          </h2>
+
+          <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-sm leading-relaxed">
+            {bookingDetails
+              ? 'Sola is negotiating the slot with the receptionist. Details will be finalized shortly.'
+              : 'Start a voice call with Sola to book your appointment.'}
+          </p>
+
+          <div className="bg-slate-50/50 dark:bg-zinc-950/40 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800/80 text-left mb-6 space-y-4">
+             <div className="flex items-start">
+               <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+                 <MapPin className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
                </div>
                <div>
-                 <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Location</p>
-                 <p className="font-medium text-white text-sm">{appointment.providerName}</p>
+                 <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Location</p>
+                 <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">{appointment.providerName}</p>
                </div>
              </div>
 
-             <div className="flex items-start mb-4">
-               <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                 </svg>
+             <div className="flex items-start">
+               <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+                 <Calendar className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
                </div>
                <div>
-                 <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Date & Time</p>
-                 <p className="font-medium text-white text-sm">
+                 <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Requested Date & Time</p>
+                 <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">
                    {appointment.date.toLocaleDateString()} at {appointment.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                  </p>
                </div>
              </div>
 
              <div className="flex items-start">
-               <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                 </svg>
+               <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+                 <Activity className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
                </div>
                <div>
-                 <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Service</p>
-                 <p className="font-medium text-white text-sm">{appointment.serviceType}</p>
+                 <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Service</p>
+                 <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">{appointment.serviceType}</p>
                </div>
              </div>
           </div>
 
           <button
             disabled
-            className="w-full py-3 px-4 rounded-xl font-semibold bg-zinc-800 text-zinc-500 cursor-not-allowed text-sm"
+            className="w-full py-3 px-4 rounded-xl font-semibold bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-600 cursor-not-allowed text-sm"
           >
             Add to Google Calendar
           </button>
@@ -110,83 +125,48 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
     );
   }
 
-  // If bookingDetails explicitly reports 'failed' show cancelled state
-  if (bookingDetails?.status === 'failed') {
-    return (
-      <div className="h-full w-full bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-100">
-        <div className="bg-zinc-900/80 p-8 rounded-2xl border border-zinc-800 shadow-2xl max-w-md w-full text-center backdrop-blur-md">
-          <div className="w-16 h-16 bg-rose-900/60 border border-rose-700 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </div>
-
-          <h2 className="text-2xl font-bold text-white mb-2">Booking Cancelled</h2>
-          <p className="text-zinc-400 mb-6 text-sm leading-relaxed">The call ended before the provider confirmed the appointment. No booking was made.</p>
-
-          <button
-            disabled
-            className="w-full py-3 px-4 rounded-xl font-semibold bg-zinc-800 text-zinc-500 cursor-not-allowed text-sm"
-          >
-            Add to Google Calendar
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Normal confirmed UI — requires bookingDetails.status === 'confirmed'
   const isConfirmed = bookingDetails?.status === 'confirmed';
 
   return (
-    <div className="h-full w-full bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-100">
-      <div className="bg-zinc-900/80 p-8 rounded-2xl border border-zinc-800 shadow-2xl max-w-md w-full text-center backdrop-blur-md">
-        <div className="w-16 h-16 bg-emerald-600/20 border border-emerald-500/40 rounded-full flex items-center justify-center mx-auto mb-4 shadow-inner">
-          <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
+    <div className="h-full w-full bg-slate-50 dark:bg-[#09090b] flex flex-col p-8 items-center justify-center text-zinc-900 dark:text-zinc-100 transition-colors duration-300">
+      <div className="bg-white dark:bg-zinc-900/60 border border-zinc-200/80 dark:border-zinc-800/80 p-8 rounded-3xl premium-shadow max-w-md w-full text-center backdrop-blur-md">
+        <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-250 dark:border-emerald-800/30 rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+          <Check className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
         </div>
 
-        <h2 className="text-2xl font-bold text-white mb-2">Booking Confirmed!</h2>
-        <p className="text-zinc-400 mb-6 text-sm leading-relaxed">Your appointment has been added to your calendar.</p>
+        <h2 className="text-2xl font-bold text-zinc-900 dark:text-white mb-1">Booking Confirmed!</h2>
+        <p className="text-zinc-500 dark:text-zinc-400 mb-6 text-sm leading-relaxed">Your appointment has been finalized by Sola.</p>
 
-        <div className="bg-zinc-950/60 rounded-xl p-4 shadow-sm border border-zinc-800 text-left mb-6">
-           <div className="flex items-start mb-4">
-             <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-               </svg>
+        <div className="bg-slate-50/50 dark:bg-zinc-950/40 rounded-2xl p-5 border border-zinc-100 dark:border-zinc-800/80 text-left mb-6 space-y-4">
+           <div className="flex items-start">
+             <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+               <MapPin className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
              </div>
              <div>
-               <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Location</p>
-               <p className="font-medium text-white text-sm">{appointment.providerName}</p>
+               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Location</p>
+               <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">{appointment.providerName}</p>
              </div>
            </div>
 
-           <div className="flex items-start mb-4">
-             <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-               </svg>
+           <div className="flex items-start">
+             <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+               <Clock className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
              </div>
              <div>
-               <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Date & Time</p>
-               <p className="font-medium text-white text-sm">
+               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Confirmed Date & Time</p>
+               <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">
                  {appointment.date.toLocaleDateString()} at {appointment.date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                </p>
              </div>
            </div>
 
            <div className="flex items-start">
-             <div className="bg-zinc-800 p-2 rounded-lg mr-3">
-               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-               </svg>
+             <div className="bg-white dark:bg-zinc-800 p-2.5 rounded-xl mr-3.5 border border-zinc-100 dark:border-zinc-700/50 shadow-sm">
+               <Activity className="h-5 w-5 text-zinc-600 dark:text-zinc-300" />
              </div>
              <div>
-               <p className="text-[10px] text-zinc-400 font-semibold uppercase tracking-wider">Service</p>
-               <p className="font-medium text-white text-sm">{appointment.serviceType}</p>
+               <p className="text-[10px] text-zinc-400 dark:text-zinc-500 font-bold uppercase tracking-wider">Service</p>
+               <p className="font-semibold text-zinc-800 dark:text-white text-sm mt-0.5">{appointment.serviceType}</p>
              </div>
            </div>
         </div>
@@ -194,16 +174,34 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
         <button
           onClick={handleAddToCalendar}
           disabled={!isConfirmed || isAdding}
-          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all text-sm ${isAdding ? 'bg-zinc-800 text-zinc-400 cursor-not-allowed' : (isConfirmed ? 'bg-emerald-600 text-white hover:bg-emerald-500 active:scale-95 shadow-lg' : 'bg-zinc-800 text-zinc-500 cursor-not-allowed')}`}
+          className={`w-full py-3 px-4 rounded-xl font-semibold transition-all text-sm flex items-center justify-center gap-2 ${
+            isAdding 
+              ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500 cursor-not-allowed' 
+              : 'bg-brand-600 hover:bg-brand-500 dark:bg-brand-500 dark:hover:bg-brand-400 text-white dark:text-zinc-950 active:scale-95 shadow-md shadow-brand-500/10'
+          }`}
         >
-          {isAdding ? '🔄 Adding to Google Calendar...' : '📅 Add to Google Calendar'}
+          {isAdding ? (
+            <>
+              <RefreshCw className="h-4 w-4 animate-spin" />
+              Adding to Google Calendar...
+            </>
+          ) : (
+            <>
+              <Calendar className="h-4 w-4" />
+              Add to Google Calendar
+            </>
+          )}
         </button>
 
-        {/* Email Calendar Invite Section */}
         {onSendEmail && isConfirmed && (
-          <div className="mt-6 pt-5 border-t border-zinc-800 text-left">
-            <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-2">Email Calendar Invite</h4>
-            <p className="text-xs text-zinc-400 mb-3">Don't have Google Calendar set up? Send a `.ics` calendar invitation file directly to your email.</p>
+          <div className="mt-6 pt-5 border-t border-zinc-100 dark:border-zinc-850 text-left">
+            <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5 text-zinc-500" />
+              Email Calendar Invite
+            </h4>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 mb-3.5 leading-relaxed">
+              Send a `.ics` calendar invitation file directly to your inbox for local mail client import.
+            </p>
             <form onSubmit={async (e) => {
               e.preventDefault();
               if (!emailInput.trim() || isSendingEmail) return;
@@ -214,7 +212,7 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
                 if (ok) {
                   setEmailStatus({ type: 'success', message: '✓ Calendar invite sent successfully!' });
                 } else {
-                  setEmailStatus({ type: 'error', message: '❌ Failed to send. Please ensure RESEND_API_KEY is configured in your .env file.' });
+                  setEmailStatus({ type: 'error', message: '❌ Failed to send. Ensure RESEND_API_KEY is configured in your .env file.' });
                 }
               } catch (err) {
                 setEmailStatus({ type: 'error', message: '❌ Error occurred during sending.' });
@@ -227,19 +225,19 @@ const CalendarView: React.FC<CalendarViewProps> = ({ appointment, bookingDetails
                 required
                 value={emailInput}
                 onChange={(e) => setEmailInput(e.target.value)}
-                placeholder="Enter your email address"
-                className="flex-1 px-3.5 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                placeholder="Enter email address"
+                className="flex-1 px-3.5 py-2.5 bg-slate-50 dark:bg-zinc-950 border border-zinc-200 dark:border-zinc-850 rounded-xl text-xs text-zinc-900 dark:text-white placeholder-zinc-400 dark:placeholder-zinc-650 focus:outline-none focus:ring-1 focus:ring-brand-500"
               />
               <button
                 type="submit"
                 disabled={isSendingEmail || !emailInput.trim()}
-                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white font-semibold text-xs rounded-xl transition-all border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2.5 bg-zinc-900 dark:bg-zinc-800 hover:bg-zinc-800 dark:hover:bg-zinc-700 text-white font-semibold text-xs rounded-xl transition-all border border-zinc-900 dark:border-zinc-750 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
               >
                 {isSendingEmail ? 'Sending...' : 'Send'}
               </button>
             </form>
             {emailStatus && (
-              <p className={`text-xs mt-2.5 font-medium ${emailStatus.type === 'success' ? 'text-emerald-400' : 'text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-2 rounded-xl mt-3'}`}>
+              <p className={`text-xs mt-2.5 font-medium ${emailStatus.type === 'success' ? 'text-emerald-600 dark:text-emerald-450' : 'text-rose-600 dark:text-rose-400 bg-rose-500/5 dark:bg-rose-500/10 border border-rose-200/50 dark:border-rose-500/25 px-3.5 py-2.5 rounded-xl'}`}>
                 {emailStatus.message}
               </p>
             )}

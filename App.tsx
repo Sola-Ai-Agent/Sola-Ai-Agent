@@ -14,7 +14,8 @@ import DynamicPanel from './components/DynamicPanel';
 import HomePage from './components/HomePage';
 import { addToGoogleCalendar, sendCalendarEmail } from './services/calendarClient';
 import { fetchPlacesFromGeoapify, geocodeLocation, extractLocationFromQuery, searchPlacesSmart } from './services/geoapifyService';
-import { ViewMode, Place, Appointment, Message, SessionMode, BookingDetails } from './types';
+import { ViewMode, Place, Appointment, Message, SessionMode, BookingDetails, User, Profile, UserPreferences } from './types';
+import { Sparkles, Home, Trash2, PhoneCall, RefreshCw, X, Check, Brain, PhoneIncoming } from 'lucide-react';
 
 const App: React.FC = () => {
   // Default places (used as the single source of truth for the demo)
@@ -36,6 +37,388 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeCategory, setActiveCategory] = useState<'all' | 'hospital' | 'saloon' | 'restaurant'>('all');
   
+  // Auth & Database States
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem('sola_token'));
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selectedProfileId, setSelectedProfileId] = useState<string>('');
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [bookings, setBookings] = useState<BookingDetails[]>([]);
+  const [feedbackBookings, setFeedbackBookings] = useState<BookingDetails[]>([]);
+  const [pendingMemory, setPendingMemory] = useState<{ profile: Profile; data: Record<string, any> } | null>(null);
+
+  const profilesRef = useRef<Profile[]>([]);
+  const selectedProfileIdRef = useRef<string>('');
+  
+  useEffect(() => {
+    profilesRef.current = profiles;
+  }, [profiles]);
+  
+  useEffect(() => {
+    selectedProfileIdRef.current = selectedProfileId;
+  }, [selectedProfileId]);
+
+  // Load session from localStorage on mount and fetch user data
+  useEffect(() => {
+    if (token) {
+      fetchUserData(token);
+    }
+  }, [token]);
+
+  const fetchUserData = async (jwtToken: string) => {
+    try {
+      const userRes = await fetch('/api/auth/me', {
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (userRes.ok) {
+        const userData = await userRes.json();
+        setUser(userData);
+      } else {
+        onLogout();
+        return;
+      }
+
+      const profRes = await fetch('/api/profiles', {
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (profRes.ok) {
+        const list = await profRes.json();
+        setProfiles(list);
+        const me = list.find((p: any) => p.relation === 'Me') || list[0];
+        if (me && me._id) {
+          setSelectedProfileId(me._id);
+        }
+      }
+
+      const prefRes = await fetch('/api/preferences', {
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (prefRes.ok) {
+        const prefs = await prefRes.json();
+        setPreferences(prefs);
+      }
+
+      const bookRes = await fetch('/api/bookings', {
+        headers: { 'Authorization': `Bearer ${jwtToken}` }
+      });
+      if (bookRes.ok) {
+        const list = await bookRes.json();
+        setBookings(list);
+
+        const feedRes = await fetch('/api/feedback', {
+          headers: { 'Authorization': `Bearer ${jwtToken}` }
+        });
+        if (feedRes.ok) {
+          const feedList = await feedRes.json();
+          const now = new Date();
+          const pending = list.filter((b: any) => {
+            if (b.status !== 'confirmed') return false;
+            const bTime = new Date(b.dateTime || `${b.date}T${b.time}`);
+            if (bTime >= now) return false;
+            const hasFeedback = feedList.some((f: any) => f.bookingId === b._id);
+            return !hasFeedback;
+          });
+          setFeedbackBookings(pending);
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching user data', e);
+    }
+  };
+
+  const onLogin = async (email: string, pass: string) => {
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: pass })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('sola_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        await fetchUserData(data.token);
+        return true;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  };
+
+  const onSignup = async (name: string, email: string, pass: string) => {
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password: pass })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('sola_token', data.token);
+        setToken(data.token);
+        setUser(data.user);
+        await fetchUserData(data.token);
+        return true;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  };
+
+  const onLogout = () => {
+    localStorage.removeItem('sola_token');
+    setToken(null);
+    setUser(null);
+    setProfiles([]);
+    setPreferences(null);
+    setBookings([]);
+    setFeedbackBookings([]);
+    setShowHomePage(true);
+  };
+
+  const onAddProfile = async (profilePayload: Omit<Profile, 'userId'>) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(profilePayload)
+      });
+      if (res.ok) {
+        const profRes = await fetch('/api/profiles', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profRes.ok) {
+          const list = await profRes.json();
+          setProfiles(list);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onUpdateProfile = async (profilePayload: Profile) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(profilePayload)
+      });
+      if (res.ok) {
+        const profRes = await fetch('/api/profiles', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profRes.ok) {
+          const list = await profRes.json();
+          setProfiles(list);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onDeleteProfile = async (id: string) => {
+    if (!token) return;
+    try {
+      const res = await fetch(`/api/profiles/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const profRes = await fetch('/api/profiles', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profRes.ok) {
+          const list = await profRes.json();
+          setProfiles(list);
+          if (selectedProfileId === id && list.length > 0) {
+            setSelectedProfileId(list[0]._id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onSavePreferences = async (prefsPayload: UserPreferences) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(prefsPayload)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setPreferences(data);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onSubmitFeedback = async (bookingId: string, rating: number, comments: string, wouldVisitAgain: boolean) => {
+    if (!token) return;
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ bookingId, rating, comments, wouldVisitAgain })
+      });
+      if (res.ok) {
+        const bookRes = await fetch('/api/bookings', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (bookRes.ok) {
+          const list = await bookRes.json();
+          setBookings(list);
+        }
+        const prefRes = await fetch('/api/preferences', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (prefRes.ok) {
+          const prefs = await prefRes.json();
+          setPreferences(prefs);
+        }
+        setFeedbackBookings(prev => prev.filter(b => b._id !== bookingId));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const onBookNew = (profileId: string) => {
+    setSelectedProfileId(profileId);
+    setBookingDetails(null);
+    bookingDetailsRef.current = null;
+    setShowHomePage(false);
+  };
+
+  const onRebookLast = (lastBooking: BookingDetails) => {
+    const rebook: BookingDetails = {
+      placeId: lastBooking.placeId,
+      placeName: lastBooking.placeName,
+      service: lastBooking.service,
+      date: new Date().toISOString().slice(0, 10),
+      time: lastBooking.time,
+      guests: lastBooking.guests || '',
+      email: lastBooking.email || '',
+      status: 'draft',
+      businessCategory: lastBooking.businessCategory,
+      categoryDetails: lastBooking.categoryDetails
+    };
+    setBookingDetails(rebook);
+    bookingDetailsRef.current = rebook;
+    setShowHomePage(false);
+  };
+
+  const scanMessagesForMemory = () => {
+    const candidates: Record<string, any> = {};
+    const recentMsgs = messages.slice(-15).map(m => m.text.toLowerCase());
+    
+    for (const text of recentMsgs) {
+      const weightMatch = text.match(/weight(?:\s+is|\s+of)?\s*(\d+)/) || text.match(/(\d+)\s*kg/);
+      if (weightMatch && weightMatch[1]) {
+        candidates.weight = weightMatch[1] + ' kg';
+      }
+
+      const bgMatch = text.match(/\b(o\+|o-|a\+|a-|b\+|b-|ab\+|ab-)\b/) || text.match(/\b(o|a|b|ab)\s*(positive|negative)\b/);
+      if (bgMatch) {
+        candidates.bloodGroup = bgMatch[0].toUpperCase();
+      }
+
+      const vehicleNoMatch = text.match(/\b([a-z]{2}\s*\d{2}\s*[a-z]{1,2}\s*\d{4})\b/i);
+      if (vehicleNoMatch) {
+        candidates.vehicleNumber = vehicleNoMatch[1].toUpperCase().replace(/\s+/g, '');
+      }
+
+      const modelMatch = text.match(/\b(honda\s+city|swift|wagonr|creta|i20|fortuner|innova|activa|vespa|bullet)\b/i);
+      if (modelMatch) {
+        candidates.vehicleModel = modelMatch[0].charAt(0).toUpperCase() + modelMatch[0].slice(1);
+      }
+    }
+    return candidates;
+  };
+
+  const handleSaveMemory = async () => {
+    if (!pendingMemory || !token) return;
+    const { profile, data } = pendingMemory;
+    const updatedMetadata = { ...(profile.metadata || {}), ...data };
+    const updatedProfile = { ...profile, metadata: updatedMetadata };
+
+    try {
+      const res = await fetch('/api/profiles', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updatedProfile)
+      });
+      if (res.ok) {
+        addSystemMessage(`✓ Saved memory parameters to ${profile.name}'s profile.`);
+        const profRes = await fetch('/api/profiles', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (profRes.ok) {
+          const list = await profRes.json();
+          setProfiles(list);
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setPendingMemory(null);
+    }
+  };
+
+  const buildUserContextString = () => {
+    if (!user) return '';
+
+    const selectedProfile = profiles.find(p => p._id === selectedProfileId);
+    const profileStr = selectedProfile 
+      ? `Active booking profile is for: ${selectedProfile.name} (Relation: ${selectedProfile.relation}, Age: ${selectedProfile.age || 'Unknown'}, Gender: ${selectedProfile.gender || 'Unknown'}, Preferred Language: ${selectedProfile.preferredLanguage || 'English'}). Notes: ${selectedProfile.notes || 'None'}. Profile Metadata: ${JSON.stringify(selectedProfile.metadata || {})}`
+      : 'Active booking profile is for the user himself.';
+
+    const prefsStr = preferences 
+      ? `Preferences:\n- Preferred Hospitals: ${preferences.preferredHospitals?.join(', ') || 'None'}\n- Preferred Doctors: ${preferences.preferredDoctors?.join(', ') || 'None'}\n- Preferred Salons: ${preferences.preferredSalons?.join(', ') || 'None'}\n- Preferred Stylists: ${preferences.preferredStylists?.join(', ') || 'None'}\n- Preferred Time slots: ${preferences.preferredAppointmentTimes?.join(', ') || 'None'}\n- Disliked Businesses (Do not suggest these!): ${preferences.dislikedBusinesses?.join(', ') || 'None'}\n- Preferred Language: ${preferences.preferredLanguage || 'English'}`
+      : 'No preferences configured.';
+
+    const pastBookings = bookings
+      .filter(b => b.status === 'confirmed')
+      .slice(-3)
+      .map(b => `- Service: ${b.service} at ${b.placeName} on ${b.date} at ${b.time} (Outcome: ${JSON.stringify(b.receptionistOutcome || {})})`)
+      .join('\n');
+
+    return `
+${profileStr}
+
+${prefsStr}
+
+Recent Booking History:
+${pastBookings || 'No bookings in history.'}
+`;
+  };
+
   // Geolocation State
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | undefined>(undefined);
   const [locationPermissionStatus, setLocationPermissionStatus] = useState<'prompt' | 'granted' | 'denied' | 'loading'>('prompt');
@@ -154,7 +537,6 @@ const App: React.FC = () => {
   useEffect(() => {
     if (bookingDetails && bookingDetails.status === 'negotiating' && sessionMode === SessionMode.USER && !dialingTriggeredRef.current) {
       dialingTriggeredRef.current = true;
-      // Slight delay to allow UI to update before connecting
       setTimeout(() => {
         transitionToReceptionist(bookingDetails);
       }, 300);
@@ -189,23 +571,23 @@ const App: React.FC = () => {
       let systemInstruction = "";
       let tools: any[] = [];
       
+      const userContext = buildUserContextString();
       if (mode === SessionMode.USER) {
-        systemInstruction = getUserSystemInstruction(lastCallStatus);
+        systemInstruction = getUserSystemInstruction(lastCallStatus, userContext);
         tools = userTools;
         console.log("Connecting as USER");
       } else {
         // Receptionist Mode - Always use the latest bookingDetailsRef, NOT the stale detailsParam
-        // This ensures we have the most recent details that were merged/updated
         const currentDetails = bookingDetailsRef.current;
-        console.log('connectToLiveAPI: receptionist mode - using bookingDetailsRef.current =', currentDetails, '(ignoring potentially stale detailsParam)');
+        console.log('connectToLiveAPI: receptionist mode - using bookingDetailsRef.current =', currentDetails);
         if (!currentDetails) {
             console.error("No booking details found for receptionist call.");
             addSystemMessage('No booking details available to call receptionist.');
             throw new Error("No booking details for call");
         }
-        systemInstruction = getReceptionistSystemInstruction(currentDetails);
+        systemInstruction = getReceptionistSystemInstruction(currentDetails, userContext);
         tools = receptionistTools;
-        console.log("Connecting as RECEPTIONIST to:", currentDetails.placeName, "for", currentDetails.service, "on", currentDetails.date, "at", currentDetails.time);
+        console.log("Connecting as RECEPTIONIST to:", currentDetails.placeName);
       }
 
       // Connect Live API
@@ -382,21 +764,26 @@ const App: React.FC = () => {
         if (currentMode === SessionMode.USER) {
             if (fc.name === 'findPlaces') {
               const query = parsedArgs?.query;
-                addSystemMessage(`Searching for "${query}"...`);
-                setViewMode(ViewMode.MAP);
-                setActiveCategory('all');
-                const foundPlaces = await searchPlacesWithGrounding(query, userLocationRef.current);
-                setPlaces(foundPlaces);
-                result = { 
-                  found_count: foundPlaces.length,
-                  places: foundPlaces.map(p => ({
-                    id: p.id,
-                    name: p.name,
-                    address: p.address,
-                    rating: p.rating,
-                    phoneNumber: p.phoneNumber
-                  }))
-                };
+                 addSystemMessage(`Searching for "${query}"...`);
+                 setViewMode(ViewMode.MAP);
+                 setActiveCategory('all');
+                 const foundPlaces = await searchPlacesWithGrounding(query, userLocationRef.current);
+                 
+                 // Exclude disliked businesses
+                 const disliked = preferences?.dislikedBusinesses || [];
+                 const filteredPlaces = foundPlaces.filter(p => !disliked.includes(p.name));
+                 
+                 setPlaces(filteredPlaces);
+                 result = { 
+                   found_count: filteredPlaces.length,
+                   places: filteredPlaces.map(p => ({
+                     id: p.id,
+                     name: p.name,
+                     address: p.address,
+                     rating: p.rating,
+                     phoneNumber: p.phoneNumber
+                   }))
+                 };
             } 
             else if (fc.name === 'selectProvider') {
               const pid = parsedArgs?.providerId;
@@ -404,22 +791,16 @@ const App: React.FC = () => {
                 selectedPlaceIdRef.current = pid;
               const place = placesRef.current.find(p => p.id === pid);
               console.log('selectProvider: providerId=', pid, 'places.length=', placesRef.current.length);
-              console.log('selectProvider: found place =', place);
               
-              // NEW: Create or merge booking state immediately when provider is selected
               if (place) {
                 updateBookingDetails({
                   placeId: place.id,
                   placeName: place.name
                 });
-                console.log('selectProvider: booking state created/updated with provider', place.id, place.name);
                 addSystemMessage(`Selected ${place.name}. Ask for date/time to proceed.`);
                 result = { selected: place.name, phoneNumber: place.phoneNumber };
               } else {
-                // If the provider id isn't in the current places list (voice may reference external id),
-                // attempt to match by provided name (voice may provide a human-readable name).
                 const providedName = parsedArgs?.providerName || parsedArgs?.provider || pid;
-                console.log('selectProvider: provider not found by id, attempting name match for:', providedName);
                 let matched = undefined as Place | undefined;
                 if (providedName && typeof providedName === 'string') {
                   const pn = providedName.trim().toLowerCase();
@@ -427,58 +808,48 @@ const App: React.FC = () => {
                 }
 
                 if (matched) {
-                  // Use matched place id and update state
                   setSelectedPlaceId(matched.id);
                   selectedPlaceIdRef.current = matched.id;
                   updateBookingDetails({ placeId: matched.id, placeName: matched.name });
-                  console.log('selectProvider: matched provided name to place', matched.id, matched.name);
                   addSystemMessage(`Selected ${matched.name} (matched by name). Ask for date/time to proceed.`);
                   result = { selected: matched.name, phoneNumber: matched.phoneNumber };
                 } else {
-                  // No match found - create draft with provided info so flow can continue
                   updateBookingDetails({
                     placeId: pid,
                     placeName: providedName
                   });
-                  console.log('selectProvider: provider not in places list, created draft with provided id/name', pid, providedName);
                   addSystemMessage(`Selected ${providedName}. Booking draft updated.`);
                   result = { selected: providedName };
                 }
               }
             }
             else if (fc.name === 'initiateCall') {
-              console.log('initiateCall: current places length=', placesRef.current.length, 'places=', placesRef.current.map(p => p.id));
                 const { placeId, service, date, time, guests, email } = parsedArgs || {};
-                // Diagnostic logging to help track undefined placeId issues
-                console.log('initiateCall: raw args =', fc.args, 'parsedArgs =', parsedArgs);
-                const draftForLog = bookingDetailsRef.current;
-                console.log('initiateCall: currentDraft =', draftForLog, 'selectedPlaceId =', selectedPlaceIdRef.current);
-                if (!placeId) {
-                  console.warn('initiateCall: provided placeId is undefined or empty');
-                  addSystemMessage('Debug: initiateCall received no placeId from the assistant. Using draft or selected place if available.');
-                }
-                // Prioritize the current booking draft, then the selected provider, then the tool args.
                 const currentDraft = bookingDetailsRef.current;
                 const targetPlaceId = currentDraft?.placeId || selectedPlaceIdRef.current || placeId;
-                console.log('initiateCall: selectedPlaceId=', selectedPlaceIdRef.current, 'providedPlaceId=', placeId, 'using targetPlaceId=', targetPlaceId);
-
+                
                 let place = placesRef.current.find(p => p.id === targetPlaceId);
-
-                if (!place) {
-                  if (!currentDraft && placesRef.current.length > 0) {
-                    // If the provided id doesn't match any default place (e.g., a Google Maps id),
-                    // ignore it and fall back to the first default place.
-                    console.warn('initiateCall: target placeId not found in default places, falling back to first default place. targetPlaceId=', targetPlaceId);
-                    place = placesRef.current[0];
-                  } else {
-                    // No default places available — return an explicit error so flow can handle it.
-                    console.warn('initiateCall: no default places available to fallback to');
-                  }
+                if (!place && !currentDraft && placesRef.current.length > 0) {
+                  place = placesRef.current[0];
                 }
 
                 if (place || currentDraft) {
-                  // Merge details instead of replacing, preserving any existing booking state.
-                  // Prioritize provided values over draft, fall back to draft for missing values
+                  const isRestaurant = 
+                    (place?.category === 'restaurant') ||
+                    (place?.name && (place.name.toLowerCase().includes('restaurant') || place.name.toLowerCase().includes('dining') || place.name.toLowerCase().includes('cafe') || place.name.toLowerCase().includes('bistro') || place.name.toLowerCase().includes('bhavan') || place.name.toLowerCase().includes('food') || place.name.toLowerCase().includes('route'))) ||
+                    (currentDraft?.placeName && (currentDraft.placeName.toLowerCase().includes('restaurant') || currentDraft.placeName.toLowerCase().includes('dining') || currentDraft.placeName.toLowerCase().includes('cafe') || currentDraft.placeName.toLowerCase().includes('bistro') || currentDraft.placeName.toLowerCase().includes('bhavan') || currentDraft.placeName.toLowerCase().includes('food') || currentDraft.placeName.toLowerCase().includes('route')));
+
+                  // Set Category details JSON
+                  const categoryDetails: Record<string, any> = {};
+                  if (guests) categoryDetails.guests = guests;
+                  if (email) categoryDetails.email = email;
+                  
+                  // Merge active profile metadata parameters
+                  const activeProf = profilesRef.current.find(p => p._id === selectedProfileIdRef.current);
+                  if (activeProf && activeProf.metadata) {
+                    Object.assign(categoryDetails, activeProf.metadata);
+                  }
+
                   const newDetails: Partial<BookingDetails> = {
                     placeId: place?.id || currentDraft?.placeId || '',
                     placeName: place?.name || currentDraft?.placeName || '',
@@ -487,11 +858,11 @@ const App: React.FC = () => {
                     time: time || currentDraft?.time || '',
                     guests: guests || currentDraft?.guests || '',
                     email: email || currentDraft?.email || '',
-                    status: 'negotiating'
+                    status: 'negotiating',
+                    businessCategory: place?.category || activeCategory || 'service',
+                    categoryDetails: categoryDetails
                   };
                   
-                  // Validate that all required details are available
-                  // Note: empty strings are falsy, so this catches both undefined and empty string cases
                   const missing: string[] = [];
                   const hasSvc = newDetails.service && newDetails.service.trim() !== '';
                   const hasDate = newDetails.date && newDetails.date.trim() !== '';
@@ -502,48 +873,32 @@ const App: React.FC = () => {
                   if (!hasDate) missing.push('Date');
                   if (!hasTime) missing.push('Time');
                   if (!hasShop) missing.push('Shop/Provider');
-
-                  // Restaurant validation for number of guests/persons
-                  const isRestaurant = 
-                    (place?.category === 'restaurant') ||
-                    (place?.name && (place.name.toLowerCase().includes('restaurant') || place.name.toLowerCase().includes('dining') || place.name.toLowerCase().includes('cafe') || place.name.toLowerCase().includes('bistro') || place.name.toLowerCase().includes('bhavan') || place.name.toLowerCase().includes('food') || place.name.toLowerCase().includes('route'))) ||
-                    (currentDraft?.placeName && (currentDraft.placeName.toLowerCase().includes('restaurant') || currentDraft.placeName.toLowerCase().includes('dining') || currentDraft.placeName.toLowerCase().includes('cafe') || currentDraft.placeName.toLowerCase().includes('bistro') || currentDraft.placeName.toLowerCase().includes('bhavan') || currentDraft.placeName.toLowerCase().includes('food') || currentDraft.placeName.toLowerCase().includes('route')));
-
+                  
                   if (isRestaurant && (!newDetails.guests || newDetails.guests.trim() === '')) {
                     missing.push('Number of guests (persons)');
                   }
 
                   if (missing.length > 0) {
                     const missingMsg = `Cannot book yet. Missing: ${missing.join(', ')}. Please provide these details first.`;
-                    console.warn('initiateCall: missing required details:', missing, 'provided:', { service, date, time, placeId, guests, email }, 'draft:', currentDraft);
                     addSystemMessage(missingMsg);
                     result = { error: missingMsg };
                   } else {
-                    // All required details present - proceed with booking
-                    console.log('initiateCall: validation passed, details ready:', { service: newDetails.service, date: newDetails.date, time: newDetails.time, placeName: newDetails.placeName, guests: newDetails.guests });
                     updateBookingDetails(newDetails);
-                    
-                    // Get the updated details for transition
                     const updatedDetails = bookingDetailsRef.current;
                     const needsGuests = isRestaurant && (!updatedDetails?.guests || updatedDetails.guests.trim() === '');
                     
                     if (updatedDetails && updatedDetails.service?.trim() && updatedDetails.date?.trim() && updatedDetails.time?.trim() && !needsGuests) {
-                      // Update ref and state to ensure status is 'negotiating'
                       updatedDetails.status = 'negotiating';
                       setBookingDetails(updatedDetails);
                       bookingDetailsRef.current = updatedDetails;
-                      console.log('initiateCall: final booking details verified:', updatedDetails);
                       
-                      // Show complete booking summary before dialing
                       const guestInfo = updatedDetails.guests ? ` for ${updatedDetails.guests} persons` : '';
                       addSystemMessage(`Booking confirmed: ${updatedDetails.service}${guestInfo} at ${updatedDetails.placeName} on ${updatedDetails.date} at ${updatedDetails.time}. Dialing receptionist...`);
-                      console.log('initiateCall: all details present and verified, transitioning to receptionist');
-
+                      
                       result = { status: 'switching_session' };
                       transitionToReceptionist(updatedDetails);
                     } else {
-                      console.warn('initiateCall: validation passed but details became empty after merge:', updatedDetails);
-                      addSystemMessage('Warning: Booking details became incomplete after merge. Please provide service, date, and time.');
+                      addSystemMessage('Warning: Booking details became incomplete after merge.');
                       result = { error: 'Booking details incomplete after merge' };
                     }
                   }
@@ -556,33 +911,31 @@ const App: React.FC = () => {
         // --- RECEPTIONIST MODE TOOLS ---
         else if (currentMode === SessionMode.RECEPTIONIST) {
             if (fc.name === 'reportBookingOutcome') {
-                const { success, finalDate, finalTime, notes } = fc.args as any;
+                const outcomeArgs = fc.args as any;
+                const { success, finalDate, finalTime, notes } = outcomeArgs;
                 
-                // Get fresh details from ref
                 const details = bookingDetailsRef.current;
+                const targetDate = finalDate || details?.date || new Date().toISOString().slice(0, 10);
+                const targetTime = finalTime || details?.time || '12:00';
                 
                 if (success && details) {
                     const newAppt: Appointment = {
                         id: Date.now().toString(),
                         providerId: details.placeId,
                         providerName: details.placeName,
-                        date: new Date(`${finalDate || details.date}T${finalTime || details.time}`),
+                        date: new Date(`${targetDate}T${targetTime}`),
                         serviceType: details.service
                     };
                     setAppointment(newAppt);
                     setLastCallStatus("Success: Booking confirmed.");
                     setViewMode(ViewMode.CALENDAR);
                     
-                    // Add to Google Calendar (async)
                     addToGoogleCalendar(newAppt).then((res:any) => {
-                      console.log('[CALENDAR] addToGoogleCalendar result:', res);
                       addSystemMessage('✓ Booking added to your Google Calendar');
                     }).catch((err:any) => {
-                      console.error('[CALENDAR] addToGoogleCalendar error:', err);
                       addSystemMessage('❌ Calendar: ' + (err?.message || JSON.stringify(err)));
                     });
                     
-                    // Automated Resend Email dispatch if we have an API Key and user email
                     if (process.env.RESEND_API_KEY && details.email) {
                       sendCalendarEmail(newAppt, details.email).then(ok => {
                         if (ok) {
@@ -591,23 +944,101 @@ const App: React.FC = () => {
                       });
                     }
                     
-                    // IMPORTANT: Update status to stop Dialing UI when we switch back
-                    const updatedDetails = { ...details, status: 'confirmed' as const };
+                    const updatedDetails: BookingDetails = { 
+                      ...details, 
+                      status: 'confirmed' as const,
+                      receptionistOutcome: outcomeArgs
+                    };
                     setBookingDetails(updatedDetails);
                     bookingDetailsRef.current = updatedDetails;
+
+                    // Save Confirmed Booking to MongoDB API
+                    if (user && token) {
+                      const bookingPayload = {
+                        profileId: selectedProfileIdRef.current || null,
+                        businessId: details.placeId || '',
+                        businessName: details.placeName,
+                        businessCategory: details.businessCategory || activeCategory || 'service',
+                        service: details.service,
+                        dateTime: new Date(`${targetDate}T${targetTime}`).toISOString(),
+                        status: 'confirmed',
+                        receptionistOutcome: outcomeArgs,
+                        categoryDetails: details.categoryDetails || {}
+                      };
+
+                      fetch('/api/bookings', {
+                        method: 'POST',
+                        headers: {
+                          'Content-Type': 'application/json',
+                          'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify(bookingPayload)
+                      }).then(async r => {
+                        if (r.ok) {
+                          const savedBooking = await r.json();
+                          setBookings(prev => [...prev, savedBooking]);
+                          
+                          // Check for AI memory extraction
+                          const candidates = scanMessagesForMemory();
+                          const selectedProf = profilesRef.current.find(p => p._id === selectedProfileIdRef.current);
+                          if (selectedProf && Object.keys(candidates).length > 0) {
+                            const newKeys = Object.keys(candidates).filter(k => selectedProf.metadata?.[k] !== candidates[k]);
+                            if (newKeys.length > 0) {
+                              const newCandidates: Record<string, any> = {};
+                              newKeys.forEach(k => { newCandidates[k] = candidates[k]; });
+                              setPendingMemory({
+                                profile: selectedProf,
+                                data: newCandidates
+                              });
+                            }
+                          }
+                        }
+                      });
+                    }
 
                 } else {
                     setLastCallStatus(`Failed: ${notes || "Receptionist unavailable"}`);
                     if (details) {
-                        const updatedDetails = { ...details, status: 'failed' as const };
+                        const updatedDetails: BookingDetails = { 
+                          ...details, 
+                          status: 'failed' as const,
+                          receptionistOutcome: { notes: notes || "Receptionist unavailable" }
+                        };
                         setBookingDetails(updatedDetails);
                         bookingDetailsRef.current = updatedDetails;
+
+                        // Save Failed Booking to MongoDB API
+                        if (user && token) {
+                          const bookingPayload = {
+                            profileId: selectedProfileIdRef.current || null,
+                            businessId: details.placeId || '',
+                            businessName: details.placeName,
+                            businessCategory: details.businessCategory || activeCategory || 'service',
+                            service: details.service,
+                            dateTime: new Date(`${details.date}T${details.time}`).toISOString(),
+                            status: 'failed',
+                            receptionistOutcome: { notes: notes || "Receptionist unavailable" },
+                            categoryDetails: details.categoryDetails || {}
+                          };
+
+                          fetch('/api/bookings', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'Authorization': `Bearer ${token}`
+                            },
+                            body: JSON.stringify(bookingPayload)
+                          }).then(async r => {
+                            if (r.ok) {
+                              const savedBooking = await r.json();
+                              setBookings(prev => [...prev, savedBooking]);
+                            }
+                          });
+                        }
                     }
                 }
                 
                 result = { status: 'call_ended' };
-                
-                // TRANSITION: Disconnect Receptionist, Back to User
                 transitionToUser();
             }
         }
@@ -804,67 +1235,126 @@ const App: React.FC = () => {
 
   // Calendar integration is handled in services/calendarClient.ts
   // Only enable calendar action when appointment exists AND bookingDetails status is confirmed
-  const calendarAction = (appointment && bookingDetails?.status === 'confirmed') ? (() => addToGoogleCalendar(appointment)) : undefined;
-
-  const visibleMessages = messages.filter(m => m.role !== 'system');
+  const calendarAction = (appointment && bookingDetails?.status === 'confirmed') ? (() => addToGoogleCalendar(appointment)) : undefined;  const visibleMessages = messages.filter(m => m.role !== 'system');
 
   if (showHomePage) {
-    return <HomePage onGetStarted={() => setShowHomePage(false)} />;
+    return (
+      <HomePage
+        user={user}
+        onLogin={onLogin}
+        onSignup={onSignup}
+        onLogout={onLogout}
+        profiles={profiles}
+        onAddProfile={onAddProfile}
+        onUpdateProfile={onUpdateProfile}
+        onDeleteProfile={onDeleteProfile}
+        preferences={preferences}
+        onSavePreferences={onSavePreferences}
+        bookings={bookings}
+        onBookNew={onBookNew}
+        onRebookLast={onRebookLast}
+        onSubmitFeedback={onSubmitFeedback}
+        feedbackBookings={feedbackBookings}
+      />
+    );
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-[#09090b] text-zinc-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50 dark:bg-[#09090b] text-zinc-900 dark:text-zinc-100 font-sans transition-colors duration-300">
       {/* Left Panel: Sola Interface */}
-      <div className={`w-1/3 flex flex-col shadow-2xl z-20 transition-colors duration-500 bg-zinc-900/60 border-r border-zinc-800/80 backdrop-blur-md`}>
-        <div className="p-6 border-b border-zinc-800/80">
+      <div className="w-1/3 flex flex-col shadow-xl z-20 bg-white/95 dark:bg-zinc-950/95 border-r border-zinc-200/80 dark:border-zinc-900 backdrop-blur-md transition-colors duration-300">
+        <div className="p-6 border-b border-zinc-100 dark:border-zinc-900">
           <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-extrabold flex items-center gap-3 tracking-tight">
-                <span className={`w-3 h-3 rounded-full ${sessionMode === SessionMode.RECEPTIONIST ? 'bg-emerald-400 animate-pulse' : 'bg-emerald-500'} shadow-sm`} />
-                {sessionMode === SessionMode.USER ? "Sola Assistant" : "Live Call"}
+            <div className="min-w-0">
+              <h1 className="text-lg font-bold flex items-center gap-2 tracking-tight text-zinc-900 dark:text-white">
+                <div className="w-6 h-6 rounded-lg bg-brand-50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-900 flex items-center justify-center">
+                  <Sparkles className="h-3.5 w-3.5 text-brand-600 dark:text-brand-400" />
+                </div>
+                <span>{sessionMode === SessionMode.USER ? "Sola Assistant" : "Live Phone Call"}</span>
               </h1>
-              <p className="text-sm text-zinc-400 mt-1">{sessionMode === SessionMode.USER ? "Regional voice booking assistant" : `Calling: ${bookingDetails?.placeName}`}</p>
+              <p className="text-[11px] text-zinc-400 dark:text-zinc-500 mt-1 font-semibold truncate uppercase tracking-wider">
+                {sessionMode === SessionMode.USER ? "Regional Voice Agent" : `Calling: ${bookingDetails?.placeName}`}
+              </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 shrink-0">
               <button 
                 onClick={() => setShowHomePage(true)} 
-                title="Back to Home Page" 
-                className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-300 hover:text-white rounded-lg shadow-sm transition-all flex items-center gap-1.5 font-semibold"
+                title="Back to Dashboard" 
+                className="p-2 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-500 hover:text-zinc-950 dark:hover:text-white rounded-xl border border-zinc-200/60 dark:border-zinc-850 shadow-sm transition-all"
                 type="button"
               >
-                <span>🏠</span>
-                <span>Home</span>
+                <Home className="h-3.5 w-3.5" />
               </button>
               <button 
                 onClick={() => setMessages([])} 
                 title="Clear Chat History" 
-                className="text-xs px-2.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-400 hover:text-zinc-200 rounded-lg shadow-sm transition-all flex items-center gap-1"
+                className="p-2 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-405 hover:text-rose-600 dark:hover:text-rose-400 rounded-xl border border-zinc-200/60 dark:border-zinc-850 shadow-sm transition-all"
                 type="button"
               >
-                <span>🗑️</span>
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
-              <button onClick={simulateBookingAndDial} className="text-xs px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-200 rounded-lg shadow-sm transition-all">Debug: Dial</button>
+              <button 
+                onClick={simulateBookingAndDial} 
+                title="Simulate Call Dialing"
+                className="p-2 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-zinc-550 hover:text-brand-600 dark:hover:text-brand-400 rounded-xl border border-zinc-200/60 dark:border-zinc-850 shadow-sm transition-all"
+                type="button"
+              >
+                <PhoneCall className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         </div>
         
+        {/* AI Memory Banner */}
+        {pendingMemory && (
+          <div className="mx-4 mt-4 p-4 bg-brand-50/50 dark:bg-zinc-900/60 border border-brand-200/60 dark:border-zinc-800 rounded-2xl flex flex-col gap-3 relative z-30 shadow-lg text-left">
+            <p className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed font-semibold">
+              💡 Sola noticed new details. Save this to <strong>{pendingMemory.profile.name}'s</strong> profile?
+            </p>
+            <div className="bg-white/80 dark:bg-zinc-950/80 rounded-xl p-3 border border-zinc-200/80 dark:border-zinc-900 font-mono text-[10px] text-zinc-500 dark:text-zinc-400 space-y-1">
+              {Object.entries(pendingMemory.data).map(([k, v]) => (
+                <div key={k}>{k.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}: {String(v)}</div>
+              ))}
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setPendingMemory(null)}
+                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-550 dark:text-zinc-300 font-bold text-[10px] rounded-lg border border-zinc-200 dark:border-transparent transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={handleSaveMemory}
+                className="px-3.5 py-1.5 bg-brand-600 hover:bg-brand-500 dark:bg-brand-500 dark:hover:bg-brand-400 text-white dark:text-zinc-950 font-bold text-[10px] rounded-lg shadow-md transition-all active:scale-[0.98]"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Chat / Transcript Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
            {visibleMessages.length === 0 && sessionMode === SessionMode.USER && (
-             <div className="text-center text-zinc-500 mt-10">
-               <p className="text-sm">Say "Find a saloon nearby" or click "Enable Location" to start.</p>
+             <div className="text-center text-zinc-400 dark:text-zinc-600 mt-14 px-6 space-y-3">
+               <Brain className="h-8 w-8 mx-auto text-zinc-300 dark:text-zinc-750" />
+               <p className="text-xs font-semibold leading-relaxed">
+                 Say "Find a salon nearby" or search for providers on the right to start booking.
+               </p>
              </div>
            )}
            {sessionMode === SessionMode.RECEPTIONIST && (
-             <div className="p-4 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-center">
-                <p className="text-emerald-400 font-bold mb-1">📞 Connected</p>
-                <p className="text-sm text-zinc-400">Sola is speaking to the receptionist.</p>
+             <div className="p-4 rounded-2xl bg-brand-50/50 dark:bg-brand-950/15 border border-brand-200 dark:border-brand-900/30 text-center flex items-center justify-center gap-2">
+                <PhoneIncoming className="h-4 w-4 text-brand-650 dark:text-brand-400 animate-pulse" />
+                <p className="text-xs font-bold text-brand-700 dark:text-brand-350">Sola is speaking with the receptionist...</p>
              </div>
            )}
            {visibleMessages.map(msg => (
              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-               <div className={`max-w-[85%] p-3.5 rounded-2xl text-sm leading-relaxed ${
-                 msg.role === 'user' ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-medium shadow-md' : 'bg-zinc-800/80 border border-zinc-700/60 text-zinc-100 shadow-sm'
+               <div className={`max-w-[85%] p-3.5 rounded-2xl text-xs leading-relaxed font-semibold shadow-sm ${
+                 msg.role === 'user' 
+                   ? 'bg-brand-600 dark:bg-brand-500 text-white shadow-brand-500/5' 
+                   : 'bg-slate-100 dark:bg-zinc-900 border border-zinc-200/50 dark:border-zinc-800/40 text-zinc-800 dark:text-zinc-200'
                }`}>
                  {msg.text}
                </div>
@@ -873,7 +1363,7 @@ const App: React.FC = () => {
         </div>
 
         {/* Voice Controls */}
-        <div className="p-6 border-t border-zinc-800/80 bg-zinc-900/40">
+        <div className="p-5 border-t border-zinc-100 dark:border-zinc-900 bg-slate-50/50 dark:bg-zinc-950/20">
            <VoiceControls 
              isActive={isActive} 
              onToggle={handleToggle} 

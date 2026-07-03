@@ -1,0 +1,57 @@
+{
+  "users": [
+    {
+      "email": "niranjan230525@gmail.com",
+      "name": "Niranjan",
+      "password": "$2b$10$63iwYz/7Dc758wvghBeBYOBqJqLOudgAbpbkbmNa5WNlL3A185BwK",
+      "_id": "1782887615546_i27b701af",
+      "createdAt": "2026-07-01T06:33:35.546Z"
+    },
+    {
+      "email": "google_user@gmail.com",
+      "name": "Google User",
+      "password": "$2b$10$JWBEKFnKUrOXC6XthR1Q9.Ccgn0QNBNVnkGIC9PziEnefADg4sHQ6",
+      "_id": "1782892996027_y0npdpiab",
+      "createdAt": "2026-07-01T08:03:16.027Z"
+    },
+    {
+      "email": "kumarnarmadha4@gmail.com",
+      "name": "Niranjan",
+      "password": "$2b$10$Jbvpi67Umo8LOqAMlk.I6OB4xi0fkdCuM.fG8pkYKI.anPRBMsxDi",
+      "_id": "1782895305972_s96y4v46l",
+      "createdAt": "2026-07-01T08:41:45.972Z"
+    }
+  ],
+  "profiles": [
+    {
+      "userId": "1782887615546_i27b701af",
+      "name": "Niranjan",
+      "relation": "Me",
+      "preferredLanguage": "English",
+      "metadata": {},
+      "_id": "1782887615548_j0tyscd2h",
+      "createdAt": "2026-07-01T06:33:35.548Z"
+    },
+    {
+      "userId": "1782892996027_y0npdpiab",
+      "name": "Google User",
+      "relation": "Me",
+      "preferredLanguage": "English",
+      "metadata": {},
+      "_id": "1782892996029_dxol5zp33",
+      "createdAt": "2026-07-01T08:03:16.029Z"
+    },
+    {
+      "userId": "1782895305972_s96y4v46l",
+      "name": "Niranjan",
+      "relation": "Me",
+      "preferredLanguage": "English",
+      "metadata": {},
+      "_id": "1782895305974_te2zz6m9f",
+      "createdAt": "2026-07-01T08:41:45.974Z"
+    }
+  ],
+  "preferences": [],
+  "bookings": [],
+  "feedback": []
+}
