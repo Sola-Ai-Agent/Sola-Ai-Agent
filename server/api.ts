@@ -284,6 +284,33 @@ export async function apiMiddleware(req: any, res: any, next: any) {
         return sendJson(res, 400, { error: 'Email and password are required' });
       }
       const users = await getDbCollection('users');
+      
+      // Auto-ensure Google User exists with correct password hash (supports MongoDB & corrects legacy file DB hash)
+      if (email === 'google_user@gmail.com') {
+        const googleUser = await users.findOne({ email });
+        const correctPasswordHash = '$2b$10$otWLE7r5Tprhng3SWhlp1OXa81S.GZT5l025vxM8SIpPq6BEE8Ig.';
+        if (!googleUser) {
+          const newUser = await users.insertOne({
+            email: 'google_user@gmail.com',
+            name: 'Google User',
+            password: correctPasswordHash
+          });
+          const profiles = await getDbCollection('profiles');
+          await profiles.insertOne({
+            userId: newUser._id,
+            name: 'Google User',
+            relation: 'Me',
+            preferredLanguage: 'English',
+            metadata: {}
+          });
+        } else {
+          const isCorrectHash = await bcrypt.compare('google_sola_assistant_mock_password', googleUser.password);
+          if (!isCorrectHash) {
+            await users.updateOne({ _id: googleUser._id }, { password: correctPasswordHash });
+          }
+        }
+      }
+
       const user = await users.findOne({ email });
       if (!user) {
         return sendJson(res, 400, { error: 'Invalid email or password' });

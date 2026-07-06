@@ -58,6 +58,13 @@ const App: React.FC = () => {
     selectedProfileIdRef.current = selectedProfileId;
   }, [selectedProfileId]);
 
+  // Auto-scroll chat to bottom when new messages arrive
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
+
   // Load session from localStorage on mount and fetch user data
   useEffect(() => {
     if (token) {
@@ -486,6 +493,12 @@ ${pastBookings || 'No bookings in history.'}
   const sessionRef = useRef<Promise<any> | null>(null);
   const connectedRef = useRef(false);
 
+  // Voice Transcription Refs
+  const currentUserMessageIdRef = useRef<string | null>(null);
+  const currentModelMessageIdRef = useRef<string | null>(null);
+  const currentModelTextRef = useRef<string>('');
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
   // Keep Ref in sync with State
   useEffect(() => {
     sessionModeRef.current = sessionMode;
@@ -564,6 +577,11 @@ ${pastBookings || 'No bookings in history.'}
       // Cleanup previous session if any
       await disconnectLiveAPI(false);
 
+      // Reset transcription tracking
+      currentUserMessageIdRef.current = null;
+      currentModelMessageIdRef.current = null;
+      currentModelTextRef.current = '';
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioStreamRef.current = stream;
 
@@ -629,6 +647,8 @@ ${pastBookings || 'No bookings in history.'}
           responseModalities: [Modality.AUDIO],
           systemInstruction: systemInstruction,
           tools: tools,
+          inputAudioTranscription: {},
+          outputAudioTranscription: {},
         }
       });
 
@@ -648,9 +668,10 @@ ${pastBookings || 'No bookings in history.'}
         // Send to API
         const base64Data = float32ArrayToBase64(inputData);
         sessionRef.current?.then(session => {
+          const currentRate = audioContextRef.current?.sampleRate || INPUT_SAMPLE_RATE;
           session.sendRealtimeInput({
             media: {
-              mimeType: `audio/pcm;rate=${INPUT_SAMPLE_RATE}`,
+              mimeType: `audio/pcm;rate=${currentRate}`,
               data: base64Data
             }
           });
@@ -700,6 +721,11 @@ ${pastBookings || 'No bookings in history.'}
       audioContextRef.current = null;
     }
     
+    // Reset transcription tracking
+    currentUserMessageIdRef.current = null;
+    currentModelMessageIdRef.current = null;
+    currentModelTextRef.current = '';
+
     if (resetUI) {
       setIsActive(false);
       setVolumeLevel(0);
@@ -713,6 +739,58 @@ ${pastBookings || 'No bookings in history.'}
     if (message.serverContent?.interrupted) {
       handleInterruption();
       return;
+    }
+
+    // 0. Handle speech transcriptions (only in USER session mode, not for RECEPTIONIST call mode)
+    if (currentMode === SessionMode.USER) {
+      if (message.serverContent?.inputTranscription) {
+        const text = message.serverContent.inputTranscription.text;
+        if (text) {
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'user' && lastMsg.id === currentUserMessageIdRef.current) {
+              return [
+                ...prev.slice(0, -1),
+                { ...lastMsg, text }
+              ];
+            } else {
+              const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+              currentUserMessageIdRef.current = newId;
+              currentModelMessageIdRef.current = null;
+              currentModelTextRef.current = '';
+              return [
+                ...prev,
+                { id: newId, role: 'user', text, timestamp: new Date() }
+              ];
+            }
+          });
+        }
+      }
+
+      if (message.serverContent?.outputTranscription) {
+        const text = message.serverContent.outputTranscription.text;
+        if (text) {
+          currentModelTextRef.current += text;
+          const accumulatedText = currentModelTextRef.current;
+          setMessages(prev => {
+            const lastMsg = prev[prev.length - 1];
+            if (lastMsg && lastMsg.role === 'model' && lastMsg.id === currentModelMessageIdRef.current) {
+              return [
+                ...prev.slice(0, -1),
+                { ...lastMsg, text: accumulatedText }
+              ];
+            } else {
+              const newId = Date.now().toString() + '_' + Math.random().toString(36).substr(2, 9);
+              currentModelMessageIdRef.current = newId;
+              currentUserMessageIdRef.current = null;
+              return [
+                ...prev,
+                { id: newId, role: 'model', text: accumulatedText, timestamp: new Date() }
+              ];
+            }
+          });
+        }
+      }
     }
 
     // 1. Play Audio
@@ -1143,6 +1221,8 @@ ${pastBookings || 'No bookings in history.'}
     });
     activeSourcesRef.current = [];
     nextStartTimeRef.current = 0;
+    currentModelMessageIdRef.current = null;
+    currentModelTextRef.current = '';
   };
 
   const playAudioResponse = async (base64Data: string) => {
@@ -1399,6 +1479,7 @@ ${pastBookings || 'No bookings in history.'}
                </div>
              </div>
            ))}
+           <div ref={chatEndRef} />
         </div>
 
         {/* Voice Controls */}
